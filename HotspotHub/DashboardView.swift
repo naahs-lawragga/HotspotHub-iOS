@@ -25,7 +25,7 @@ struct DashboardView: View {
                     Text("Hotspot reachability is unverified until tested on your iPhone and Chromebook.").font(.footnote)
                 }
                 Section("SYSTEM") {
-                    Toggle("Keep Screen Awake", isOn: $keepAwake).onChange(of: keepAwake) { _, value in UIApplication.shared.isIdleTimerDisabled = value }
+                    Toggle("Keep Screen Awake", isOn: $keepAwake).onChange(of: keepAwake) { value in UIApplication.shared.isIdleTimerDisabled = value }
                     Text("Keeping the display awake uses more battery. Normal screen behavior resumes when this setting is off.").font(.footnote).foregroundStyle(.secondary)
                 }
                 Section("UPDATES") {

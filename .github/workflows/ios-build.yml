@@ -21,12 +21,16 @@ jobs:
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
           [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
-          sed -i '' -E "s/CFBundleShortVersionString: .*/CFBundleShortVersionString: $VERSION/" project.yml
+          sed -i '' -E "s/CFBundleShortVersionString: .*/CFBundleShortVersionString: \"$VERSION\"/" project.yml
+          sed -i '' -E "s/CFBundleVersion: .*/CFBundleVersion: \"$GITHUB_RUN_NUMBER\"/" project.yml
           xcodegen generate
       - name: Resolve Swift packages
         run: xcodebuild -resolvePackageDependencies -project HotspotHub.xcodeproj -scheme HotspotHub
       - name: Check portal JavaScript
-        run: node --check WebPortal/js/desktop.js
+        run: |
+          node --check WebPortal/js/desktop.js
+          node --check WebPortal/js/calculator.js
+          node --test WebPortal/tests/*.test.cjs
       - name: Build unsigned iPhone app
         run: xcodebuild -project HotspotHub.xcodeproj -scheme HotspotHub -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath build CODE_SIGNING_ALLOWED=NO build
       - name: Package unsigned IPA
@@ -75,7 +79,6 @@ jobs:
           mkdir -p pages
           jq -n --arg version "$VERSION" --arg date "$DATE" --arg url "$URL" --argjson size "$SIZE" --arg buildVersion "$GITHUB_RUN_NUMBER" --arg repo "$REPOSITORY" '{name:"HotspotHub",identifier:"org.hotspothub.source",website:("https://github.com/" + $repo),subtitle:"Local iPhone-hosted desktop portal",description:"Educational local web hosting and desktop portal. IPA is unsigned and must be installed using a supported signing workflow.",tintColor:"#2563eb",apps:[{name:"HotspotHub",bundleIdentifier:"org.hotspothub.ios",developerName:"HotspotHub contributors",subtitle:"iPhone-hosted desktop portal",localizedDescription:"Local desktop portal and HTTP server for authorized network testing.",tintColor:"#2563eb",category:"utilities",appPermissions:{entitlements:[],privacy:[]},versions:[{version:$version,buildVersion:$buildVersion,date:$date,downloadURL:$url,size:$size,minOSVersion:"16.0",localizedDescription:"Unsigned build; use SideStore, AltStore, or LiveContainer signing flow."}]}]}' > pages/source.json
           printf '%s\n' '<!doctype html><meta charset="utf-8"><title>HotspotHub distribution</title><h1>HotspotHub</h1><p><a href="source.json">AltStore source JSON</a></p>' > pages/index.html
-          cp HotspotHub.ipa pages/HotspotHub.ipa
       - name: Publish GitHub release
         env:
           GH_TOKEN: ${{ github.token }}

@@ -5,7 +5,7 @@ HotspotHub is an educational iOS-hosted desktop portal prototype. It contains a 
 ## Current status
 
 - The portal is plain HTML/CSS/JavaScript and works offline after it is served. It includes movable/resizable app windows, taskbar, launcher, notes, tasks, calculator, text editor, drawing canvas, JSON formatter, clock, and a same-origin browser shell.
-- The iOS target source starts/stops a SwiftNIO HTTP server, serves bundled portal files, provides `/health`, checks stable GitHub releases, and displays status/URL. It restricts methods, bounds request bodies and static file sizes, rejects traversal paths, and serves fixed app-bundle content.
+- The iOS target source starts/stops a SwiftNIO HTTP server, serves bundled portal files, provides `/health`, checks stable GitHub releases, and displays status/URL. It binds to a detected active local IPv4 address, restricts methods, limits request bodies to 1 MiB and static files to 25 MiB, closes idle connections after 30 seconds, rejects traversal paths, and serves fixed app-bundle content.
 - `/health` reports app version, server state, and uptime only.
 - File sharing, remote proxying, streaming, USB transport, automatic IPA delivery, and arbitrary iOS remote control are not implemented.
 
@@ -41,6 +41,8 @@ No capture extension or stream is included. iOS screen broadcasting requires the
 The workflow publishes release assets and an AltStore-compatible source at the GitHub Pages root only after a successful version tag build. SideStore accepts compatible AltStore sources. LiveContainer source URL-scheme import is supported by its current releases, but this project makes no claim of device-side installation testing. No signing credentials are included; the generated IPA is unsigned.
 
 Create stable releases by pushing a semantic version tag such as `v0.1.0`. Release publishing is gated on a successful iOS device build. The update checker reads the latest GitHub Release and only links to its page; it never installs an IPA silently. The project uses bundle identifier `org.hotspothub.ios` and versioned tags as the marketing version.
+
+After the first successful tagged release, the source URL is `https://naahs-lawragga.github.io/HotspotHub-iOS/source.json`. Add it in AltStore or SideStore using its Sources screen. LiveContainer supports `livecontainer://sources?url=<percent-encoded-source-url>` in current releases; copying the HTTPS source URL into LiveContainer remains the fallback. The source is published only after the release workflow succeeds.
 
 ## Disclaimer
 

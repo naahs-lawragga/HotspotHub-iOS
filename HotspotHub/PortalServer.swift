@@ -107,6 +107,18 @@ private final class PortalHTTPHandler: ChannelInboundHandler {
     }
 }
 
+private final class IdleConnectionHandler: ChannelInboundHandler {
+    typealias InboundIn = NIOAny
+    typealias OutboundOut = NIOAny
+    func userInboundEventTriggered(context: ChannelHandlerContext, event: Any) {
+        if let idle = event as? IdleStateHandler.IdleStateEvent, idle == .read {
+            context.close(promise: nil)
+        } else {
+            context.fireUserInboundEventTriggered(event)
+        }
+    }
+}
+
 @MainActor
 final class PortalServer: ObservableObject {
     @Published private(set) var state = "Offline"
@@ -139,7 +151,11 @@ final class PortalServer: ObservableObject {
                     .serverChannelOption(ChannelOptions.backlog, value: 128)
                     .childChannelInitializer { channel in
                         channel.pipeline.configureHTTPServerPipeline().flatMap {
-                            channel.pipeline.addHandler(PortalHTTPHandler(root: root, metrics: metrics))
+                            channel.pipeline.addHandler(IdleStateHandler(readTimeout: .seconds(30))).flatMap {
+                                channel.pipeline.addHandler(IdleConnectionHandler()).flatMap {
+                                    channel.pipeline.addHandler(PortalHTTPHandler(root: root, metrics: metrics))
+                                }
+                            }
                         }
                     }
                     .bind(host: bindAddress, port: port).wait()
