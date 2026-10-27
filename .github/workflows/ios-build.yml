@@ -1,4 +1,7 @@
 name: iOS build and release
+concurrency:
+  group: hotspothub-${{ github.ref }}
+  cancel-in-progress: true
 on:
   push:
     branches: [main]
@@ -37,7 +40,10 @@ jobs:
         run: |
           mkdir -p ipa/Payload
           cp -R build/Build/Products/Release-iphoneos/HotspotHub.app ipa/Payload/
+          APP_ID=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' ipa/Payload/HotspotHub.app/Info.plist)
+          test "$APP_ID" = "org.hotspothub.ios"
           ditto -c -k ipa/Payload HotspotHub.ipa
+          unzip -t HotspotHub.ipa
       - uses: actions/upload-artifact@v4
         with:
           name: HotspotHub-${{ github.ref_name }}-unsigned-ipa
@@ -78,12 +84,20 @@ jobs:
           URL="https://github.com/${REPOSITORY}/releases/download/${VERSION_TAG}/HotspotHub.ipa"
           mkdir -p pages
           jq -n --arg version "$VERSION" --arg date "$DATE" --arg url "$URL" --argjson size "$SIZE" --arg buildVersion "$GITHUB_RUN_NUMBER" --arg repo "$REPOSITORY" '{name:"HotspotHub",identifier:"org.hotspothub.source",website:("https://github.com/" + $repo),subtitle:"Local iPhone-hosted desktop portal",description:"Educational local web hosting and desktop portal. IPA is unsigned and must be installed using a supported signing workflow.",tintColor:"#2563eb",apps:[{name:"HotspotHub",bundleIdentifier:"org.hotspothub.ios",developerName:"HotspotHub contributors",subtitle:"iPhone-hosted desktop portal",localizedDescription:"Local desktop portal and HTTP server for authorized network testing.",tintColor:"#2563eb",category:"utilities",appPermissions:{entitlements:[],privacy:[]},versions:[{version:$version,buildVersion:$buildVersion,date:$date,downloadURL:$url,size:$size,minOSVersion:"16.0",localizedDescription:"Unsigned build; use SideStore, AltStore, or LiveContainer signing flow."}]}]}' > pages/source.json
+          jq -e '(.apps | length == 1) and (.apps[0].bundleIdentifier == "org.hotspothub.ios") and (.apps[0].versions[0].version != "") and (.apps[0].versions[0].downloadURL | startswith("https://")) and (.apps[0].versions[0].size > 0)' pages/source.json >/dev/null
           printf '%s\n' '<!doctype html><meta charset="utf-8"><title>HotspotHub distribution</title><h1>HotspotHub</h1><p><a href="source.json">AltStore source JSON</a></p>' > pages/index.html
       - name: Publish GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
-        run: gh release create "$TAG" HotspotHub.ipa pages/source.json --verify-tag --title "HotspotHub $TAG" --generate-notes
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          if gh release view "$TAG" --repo "$REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$TAG" HotspotHub.ipa pages/source.json --clobber --repo "$REPOSITORY"
+          else
+            gh release create "$TAG" HotspotHub.ipa pages/source.json --verify-tag --title "HotspotHub $TAG" --generate-notes --repo "$REPOSITORY"
+          fi
+          curl --fail --silent --show-error --location --retry 3 "https://github.com/${REPOSITORY}/releases/download/${TAG}/HotspotHub.ipa" --output /dev/null
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
