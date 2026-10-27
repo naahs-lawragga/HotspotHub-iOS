@@ -1,0 +1,89 @@
+name: iOS build and release
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Generate Xcode project
+        run: xcodegen generate
+      - name: Set release version
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          sed -i '' -E "s/CFBundleShortVersionString: .*/CFBundleShortVersionString: $VERSION/" project.yml
+          xcodegen generate
+      - name: Resolve Swift packages
+        run: xcodebuild -resolvePackageDependencies -project HotspotHub.xcodeproj -scheme HotspotHub
+      - name: Check portal JavaScript
+        run: node --check WebPortal/js/desktop.js
+      - name: Build unsigned iPhone app
+        run: xcodebuild -project HotspotHub.xcodeproj -scheme HotspotHub -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath build CODE_SIGNING_ALLOWED=NO build
+      - name: Package unsigned IPA
+        run: |
+          mkdir -p ipa/Payload
+          cp -R build/Build/Products/Release-iphoneos/HotspotHub.app ipa/Payload/
+          ditto -c -k ipa/Payload HotspotHub.ipa
+      - uses: actions/upload-artifact@v4
+        with:
+          name: HotspotHub-${{ github.ref_name }}-unsigned-ipa
+          path: HotspotHub.ipa
+          if-no-files-found: error
+          retention-days: 30
+      - uses: actions/upload-artifact@v4
+        with:
+          name: HotspotHub-app-bundle
+          path: build/Build/Products/Release-iphoneos/HotspotHub.app
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: macos-latest
+    permissions:
+      contents: write
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: HotspotHub-${{ github.ref_name }}-unsigned-ipa
+      - name: Create AltStore source metadata
+        env:
+          REPOSITORY: ${{ github.repository }}
+          VERSION_TAG: ${{ github.ref_name }}
+        run: |
+          VERSION="${VERSION_TAG#v}"
+          SIZE=$(stat -f%z HotspotHub.ipa)
+          DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          URL="https://github.com/${REPOSITORY}/releases/download/${VERSION_TAG}/HotspotHub.ipa"
+          mkdir -p pages
+          jq -n --arg version "$VERSION" --arg date "$DATE" --arg url "$URL" --argjson size "$SIZE" --arg buildVersion "$GITHUB_RUN_NUMBER" --arg repo "$REPOSITORY" '{name:"HotspotHub",identifier:"org.hotspothub.source",website:("https://github.com/" + $repo),subtitle:"Local iPhone-hosted desktop portal",description:"Educational local web hosting and desktop portal. IPA is unsigned and must be installed using a supported signing workflow.",tintColor:"#2563eb",apps:[{name:"HotspotHub",bundleIdentifier:"org.hotspothub.ios",developerName:"HotspotHub contributors",subtitle:"iPhone-hosted desktop portal",localizedDescription:"Local desktop portal and HTTP server for authorized network testing.",tintColor:"#2563eb",category:"utilities",appPermissions:{entitlements:[],privacy:[]},versions:[{version:$version,buildVersion:$buildVersion,date:$date,downloadURL:$url,size:$size,minOSVersion:"16.0",localizedDescription:"Unsigned build; use SideStore, AltStore, or LiveContainer signing flow."}]}]}' > pages/source.json
+          printf '%s\n' '<!doctype html><meta charset="utf-8"><title>HotspotHub distribution</title><h1>HotspotHub</h1><p><a href="source.json">AltStore source JSON</a></p>' > pages/index.html
+          cp HotspotHub.ipa pages/HotspotHub.ipa
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: gh release create "$TAG" HotspotHub.ipa pages/source.json --verify-tag --title "HotspotHub $TAG" --generate-notes
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: pages
+      - id: deployment
+        uses: actions/deploy-pages@v4

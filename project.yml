@@ -1,0 +1,38 @@
+name: HotspotHub
+options:
+  bundleIdPrefix: org.hotspothub
+  deploymentTarget:
+    iOS: "16.0"
+packages:
+  swift-nio:
+    url: https://github.com/apple/swift-nio.git
+    from: 2.65.0
+targets:
+  HotspotHub:
+    type: application
+    platform: iOS
+    sources:
+      - path: HotspotHub
+        excludes: [Info.plist]
+      - path: WebPortal
+        buildPhase: resources
+    info:
+      path: HotspotHub/Info.plist
+      properties:
+        CFBundleDisplayName: HotspotHub
+        CFBundleIdentifier: org.hotspothub.ios
+        CFBundleShortVersionString: 0.1.0
+        CFBundleVersion: 1
+        NSLocalNetworkUsageDescription: HotspotHub hosts a local desktop portal for devices on your network.
+        UIApplicationSupportsIndirectInputEvents: true
+        UILaunchScreen: {}
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: org.hotspothub.ios
+        SWIFT_VERSION: 5.0
+        TARGETED_DEVICE_FAMILY: "1"
+    dependencies:
+      - package: swift-nio
+        product: NIOPosix
+      - package: swift-nio
+        product: NIOHTTP1
